@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor PDF para Word</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f9; margin: 0; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 350px; }
+        h2 { color: #333; }
+        input[type="file"] { margin: 20px 0; display: block; width: 100%; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; margin-bottom: 10px; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #downloadLink { display: none; margin-top: 15px; color: #28a745; font-weight: bold; text-decoration: none; }
+        .status { margin-top: 10px; font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>PDF para Word</h2>
+    <input type="file" id="pdfInput" accept="application/pdf">
+    <button id="convertBtn" disabled>Converter para Word</button>
+    <div id="status" class="status"></div>
+    <a id="downloadLink">Baixar Arquivo Word (.docx)</a>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://unpkg.com/docx@7.8.2/build/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<script>
+    const pdfInput = document.getElementById('pdfInput');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadLink = document.getElementById('downloadLink');
+    const status = document.getElementById('status');
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    let pdfData = null;
+
+    // Habilita o botão quando o arquivo é selecionado
+    pdfInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            convertBtn.disabled = false;
+            status.innerText = "Arquivo selecionado.";
+        }
+    });
+
+    convertBtn.addEventListener('click', async () => {
+        const file = pdfInput.files[0];
+        if (!file) return;
+
+        status.innerText = "Lendo PDF... (isso pode demorar)";
+        convertBtn.disabled = true;
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = "";
+
+            // Extração de texto página por página
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(" ");
+                fullText += pageText + "\n\n";
+            }
+
+            status.innerText = "Gerando Word...";
+
+            // Criação do Documento Word usando a biblioteca docx
+            const doc = new docx.Document({
+                sections: [{
+                    properties: {},
+                    children: fullText.split('\n').map(line => new docx.Paragraph({
+                        children: [new docx.TextRun(line)],
+                    })),
+                }],
+            });
+
+            // Gerar o blob e preparar o download
+            const blob = await docx.Packer.toBlob(doc);
+            const url = URL.createObjectURL(blob);
+            
+            downloadLink.href = url;
+            downloadLink.download = file.name.replace(".pdf", "") + ".docx";
+            downloadLink.style.display = "block";
+            status.innerText = "Conversão concluída!";
+
+        } catch (error) {
+            console.error(error);
+            status.innerText = "Erro ao converter arquivo.";
+        } finally {
+            convertBtn.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>
